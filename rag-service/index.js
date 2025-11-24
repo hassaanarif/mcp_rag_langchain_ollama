@@ -97,7 +97,7 @@ ${query}
 
     const response = await llm.invoke(prompt);
 
-    console.log("Resonse Content: ", response.content);
+    console.log("Response content:", response.content);
 
     // Normalize the LLM response to a simple string answer
     let answerText;
