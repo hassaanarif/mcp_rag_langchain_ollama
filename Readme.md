@@ -1,48 +1,69 @@
-# RAG + MCP (Ollama) — Transport Policy Example
+# RAG + MCP (Ollama) — Transport Policy Demo
 
-This project demonstrates how to connect a **local RAG (Retrieval-Augmented Generation) service** running on top of **Ollama** to an **MCP server** that exposes a `getTransportPolicy` tool to clients such as **Claude Desktop**.
+This repo shows how to connect a **local RAG (Retrieval-Augmented Generation) service** on top of **Ollama** to an **MCP server** that exposes a single tool, `getTransportPolicy`, to MCP‑enabled clients (e.g. Claude Desktop).
 
-The example uses a local **PDF transport policy document** and lets you ask natural language questions about it via MCP.
+The knowledge base is a real policy document: **Pakistan’s Transport Policy** (PDF). The goal is to demonstrate how you can turn a local PDF into a queryable tool, answering natural‑language questions grounded in that policy.
 
 ---
 
-## High-Level Architecture
+## What this project does (and why)
+
+- **Idea / motive**  
+  Make it easy to experiment with _local_, _policy‑aware_ assistants where:
+
+  - Data never leaves your machine.
+  - The model is forced to answer based on a specific source (here, Pakistan’s Transport Policy PDF).
+
+- **What it actually does**
+
+  - Loads the **Pakistan’s Transport Policy** PDF.
+  - Chunks and embeds the text into an in‑memory vector store.
+  - Uses an Ollama‑hosted model to answer questions with relevant policy context.
+  - Wraps this RAG pipeline behind an MCP tool, `getTransportPolicy`, so any MCP client can call it.
+
+- **How it works (high level)**
+  1. MCP client calls `getTransportPolicy` with a `query` string.
+  2. MCP server forwards the query to the local RAG HTTP service.
+  3. RAG service retrieves relevant chunks from **Pakistan’s Transport Policy** and sends them to the LLM.
+  4. The answer is returned to the MCP client as both human‑readable `content` and structured `{ answer: string }`.
+
+---
+
+## Architecture
 
 - **RAG Service (`rag-service/`)**
 
   - Node.js + Express HTTP API.
   - Uses LangChain + Ollama for:
     - PDF loading and chunking.
-    - Embeddings via `nomic-embed-text` and in-memory vector store.
-    - Question-answering via `qwen2.5:1.5b` chat model.
-  - Exposes a `POST /query` endpoint on **http://localhost:3001/query** that returns an answer string.
+    - Embeddings (`nomic-embed-text`) + in‑memory vector store.
+    - Question‑answering via `qwen2.5:1.5b`.
+  - Exposes `POST /query` on **http://localhost:3001/query** returning `{ answer: string }`.
 
 - **MCP Server (`mcp-server/`)**
 
-  - Implements an MCP server using `@modelcontextprotocol/sdk`.
-  - Registers a single tool: **`getTransportPolicy`**.
-  - When invoked, it calls the RAG service’s `/query` endpoint and returns:
-    - Human-readable `content` for display in the client.
-    - `structuredContent` matching the tool’s output schema (`{ answer: string }`).
+  - Built with `@modelcontextprotocol/sdk`.
+  - Registers **`getTransportPolicy`**.
+  - On each call:
+    - Sends the `query` to the RAG service.
+    - Returns both display `content` and `structuredContent: { answer }`.
 
 - **MCP Client (e.g. Claude Desktop)**
   - Connects to the MCP server over stdio.
-  - Exposes the `getTransportPolicy` tool in the UI so you can query the local transport policy.
+  - Exposes the `getTransportPolicy` tool so you can ask questions about **Pakistan’s Transport Policy** directly from the chat UI.
 
 ---
 
-## Tools Exposed by the MCP Server
+## Tools
 
 - **`getTransportPolicy`**
-  - **Description:** Query the local RAG system for transport policy answers.
-  - **Input schema:**
-    - `query` (string) — The transport policy question to answer.
-  - **Output schema (structuredContent):**
-    - `answer` (string) — The answer to the transport policy question.
+  - **Input:**
+    - `query` (string) — Your transport‑policy question.
+  - **Output (`structuredContent`):**
+    - `answer` (string) — Answer grounded in Pakistan’s Transport Policy PDF.
   - **Behavior:**
-    - Sends the `query` to the RAG HTTP service at `http://localhost:3001/query`.
-    - The RAG service retrieves relevant chunks from the PDF and calls the LLM.
-    - Returns the answer both as normal MCP `content` (for display) and as `structuredContent.answer` (for programmatic use).
+    - Forwards `query` to `http://localhost:3001/query`.
+    - RAG service performs retrieval over the PDF and uses the LLM to generate an answer.
 
 ---
 
@@ -51,219 +72,133 @@ The example uses a local **PDF transport policy document** and lets you ask natu
 - **General**
 
   - Node.js **18+** and npm
-  - Git (optional, for cloning from GitHub)
+  - Git (optional)
 
 - **Ollama**
 
-  - Install Ollama: https://ollama.com
-  - Ensure the Ollama daemon is running (`ollama serve` usually runs automatically when you use `ollama` commands).
+  - Install: https://ollama.com
+  - Ensure the Ollama daemon is running (`ollama serve`).
 
-- **Models / Embeddings required by this project**
+- **Models used**
 
 ```bash
 ollama pull qwen2.5:1.5b
 ollama pull nomic-embed-text
 ```
 
-These models are used by the RAG service:
-
-- `nomic-embed-text` — for generating embeddings and building the in-memory vector store.
-- `qwen2.5:1.5b` — as the chat model for answering transport policy questions.
-
 ---
 
 ## Project Layout
 
-- **`rag-service/`**  
-  Node.js + Express REST API exposing `/query` for RAG queries.
-
-- **`mcp-server/`**  
-  MCP server implementation exposing the `getTransportPolicy` tool over stdio.
-
-- **`assets/transport_policy.pdf`** (inside `rag-service/`)  
-  Source PDF used as the knowledge base for the RAG pipeline.
+- **`rag-service/`** – RAG HTTP API exposing `/query`.
+- **`mcp-server/`** – MCP server exposing `getTransportPolicy`.
+- **`rag-service/assets/transport_policy.pdf`** – **Pakistan’s Transport Policy** PDF used as the sole knowledge source.
 
 ---
 
-## Setup and Installation
+## Setup
 
-Clone the repository (if you haven’t already):
+From the project root:
 
 ```bash
 git clone <your-repo-url> rag-mcp-ollama
 cd rag-mcp-ollama
 ```
 
-You will set up **both** the RAG service and the MCP server.
-
-### 1. Install dependencies for the RAG service
-
-From the project root:
+- **RAG service**
 
 ```bash
 cd rag-service
 npm install
 ```
 
-This installs LangChain, Express, and related dependencies.
-
-### 2. Install dependencies for the MCP server
-
-From the project root:
+- **MCP server**
 
 ```bash
-cd mcp-server
+cd ../mcp-server
 npm install
-```
-
-This installs the Model Context Protocol SDK and TypeScript.
-
-### 3. Build the MCP server
-
-From `mcp-server/`:
-
-```bash
 npm run build
 ```
 
-This compiles the TypeScript source in `src/` to JavaScript in `build/` and makes `build/index.js` executable.
-
-> Note: The MCP server binary is configured in `package.json` under `bin`, but you can also run it directly with Node (see below).
-
 ---
 
-## Running the System Locally
+## Run locally
 
-You need to run **two processes**:
+You need **two** processes: the RAG HTTP service and the MCP server.
 
-1. **RAG HTTP service** (Express app).
-2. **MCP server** (stdio-based process used by the MCP client).
-
-### Step 1 — Start Ollama (if not already running)
-
-On most systems, Ollama will start automatically when a model is used. To be explicit, you can run:
+1. **Start Ollama** (if needed):
 
 ```bash
 ollama serve
-```
-
-Ensure the required models are pulled:
-
-```bash
 ollama pull qwen2.5:1.5b
 ollama pull nomic-embed-text
 ```
 
-### Step 2 — Start the RAG service
-
-In a terminal:
+2. **Start the RAG service**:
 
 ```bash
 cd rag-mcp-ollama/rag-service
 npm start
 ```
 
-What this does:
+This will:
 
-- Loads `assets/transport_policy.pdf`.
-- Splits it into chunks using `RecursiveCharacterTextSplitter`.
-- Builds an in-memory `MemoryVectorStore` with `nomic-embed-text` embeddings.
-- Initializes the `qwen2.5:1.5b` chat model.
-- Starts an Express server on **http://localhost:3001** with:
-  - `POST /query` — expects JSON `{ "query": "your question" }` and responds with `{ "answer": "..." }`.
+- Load `assets/transport_policy.pdf` (Pakistan’s Transport Policy).
+- Chunk text and build a `MemoryVectorStore` with `nomic-embed-text` embeddings.
+- Initialize `qwen2.5:1.5b`.
+- Start an Express server at `http://localhost:3001` with `POST /query`.
 
-You can test it directly:
-
-```bash
-curl -X POST http://localhost:3001/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is the transport policy about?"}'
-```
-
-### Step 3 — Run the MCP server
-
-In a separate terminal:
+3. **Start the MCP server**:
 
 ```bash
 cd rag-mcp-ollama/mcp-server
-npm run build   # if not already built
+npm run build   # if not built yet
 node build/index.js
 ```
 
-This starts the MCP server on stdio. It logs to stderr:
-
-- `Transport MCP Server running on stdio`
-
-The MCP server exposes the `getTransportPolicy` tool and forwards queries to the RAG service running on port 3001.
+The server logs `Transport MCP Server running on stdio` and exposes `getTransportPolicy`.
 
 ---
 
-## Using with Claude Desktop (or another MCP client)
+## Using with Claude Desktop (example)
 
-> The exact configuration format may differ per client. Below is a **conceptual example** for wiring this MCP server into a typical MCP-enabled client.
-
-Configure a new MCP server entry pointing to the Node command that runs your MCP server, for example:
+Configure an MCP server entry that runs the Node process, for example:
 
 ```jsonc
 {
   "transport-mcp": {
     "command": "node",
     "args": ["/absolute/path/to/rag-mcp-ollama/mcp-server/build/index.js"],
-    "env": {
-      // Add any environment overrides if needed
-    }
+    "env": {}
   }
 }
 ```
 
-Once configured and enabled in your MCP client:
+Once enabled, you should see a **`transport-mcp`** server with the **`getTransportPolicy`** tool. Ask questions like:
 
-- You should see a **`transport-mcp`** (or similar) server available.
-- It will expose the **`getTransportPolicy`** tool.
-- You can type questions such as:
-  - "What is the maximum allowed speed in the transport policy?"
-  - "How are safety inspections described in the policy?"
+- "What are the main objectives of Pakistan’s Transport Policy?"
+- "How does the policy address road safety?"
 
-The client will call the `getTransportPolicy` tool, which calls the RAG service and returns an answer based on the PDF.
-
----
-
-## Development Notes
-
-- **RAG service (`rag-service/index.js`)**
-
-  - Uses `PDFLoader` to load `assets/transport_policy.pdf`.
-  - Splits documents with `RecursiveCharacterTextSplitter`.
-  - Builds a `MemoryVectorStore` with `OllamaEmbeddings` (`nomic-embed-text`).
-  - Uses `ChatOllama` (`qwen2.5:1.5b`) to answer questions given retrieved context.
-
-- **MCP server (`mcp-server/src/index.ts`)**
-  - Uses `@modelcontextprotocol/sdk` to create an `McpServer`.
-  - Registers `getTransportPolicy` with:
-    - `inputSchema`: `{ query: string }`.
-    - `outputSchema`: `{ answer: string }`.
-  - Calls the RAG service at `http://localhost:3001/query` and maps the response to both `content` and `structuredContent`.
+Answers will be generated by the local RAG pipeline over the Pakistan’s Transport Policy PDF.
 
 ---
 
 ## Troubleshooting
 
-- **RAG service not responding / connection refused**
+- **RAG service not responding**
 
-  - Ensure `npm start` is running in `rag-service/` and listening on port 3001.
-  - Check that Ollama is running and models are pulled.
+  - Ensure `npm start` is running in `rag-service/` on port 3001.
+  - Verify Ollama is running and both models are pulled.
 
-- **MCP client reports output schema / validation errors**
+- **MCP client schema / validation errors**
 
-  - Confirm you are using the built server (`node build/index.js`).
-  - Ensure both `content` and `structuredContent.answer` are being returned (already implemented in this repo).
+  - Ensure you are running the built server (`node build/index.js`).
 
-- **Ollama model errors or slow responses**
-  - Verify `ollama serve` is running and system resources are sufficient.
-  - Make sure the correct models are pulled: `qwen2.5:1.5b` and `nomic-embed-text`.
+- **Model errors or slow responses**
+  - Check `ollama serve` is healthy and your system has enough resources.
 
 ---
 
 ## License
 
-This project is provided as an example for building RAG + MCP integrations with Ollama. Adjust the license text as needed for your use case.
+This project is provided as an example of building a local, PDF‑grounded RAG + MCP integration with Ollama. Adjust the license text as needed for your use case.
