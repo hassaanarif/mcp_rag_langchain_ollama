@@ -1,0 +1,27 @@
+{
+  "author": "",
+  "bin": {
+    "weather": "./build/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "zod": "^3.25.76"
+  },
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  },
+  "files": [
+    "build"
+  ],
+  "keywords": [],
+  "license": "ISC",
+  "main": "index.js",
+  "name": "mcp-server",
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js"
+  },
+  "type": "module",
+  "version": "1.0.0"
+}
